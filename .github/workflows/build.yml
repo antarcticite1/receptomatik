@@ -57,18 +57,27 @@ jobs:
         if: steps.unpack.outputs.skip != 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
             echo "::error::Нет секрета KEYSTORE_BASE64. Добавьте его в Settings → Secrets and variables → Actions."
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > "$RUNNER_TEMP/release.jks" || {
+            echo "::error::Секрет KEYSTORE_BASE64 повреждён. Создайте его заново и вставьте текст целиком."
+            exit 1
+          }
+          PASS="$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d ' \r\n\t')"
+          if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$PASS" -alias app > /dev/null 2>&1; then
+            echo "::error::Ключ не открывается: проверьте секреты KEYSTORE_BASE64 и KEYSTORE_PASSWORD."
+            exit 1
+          fi
           echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          echo "::add-mask::$PASS"
+          echo "KEYSTORE_PASSWORD=$PASS" >> "$GITHUB_ENV"
 
       - name: Собрать APK
         if: steps.unpack.outputs.skip != 'true'
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
