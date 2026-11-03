@@ -167,9 +167,10 @@ svg:not(.art) { width: 22px; height: 22px; fill: none; stroke: currentColor; str
 @media (hover: hover) { .btn:hover { border-color: var(--plum); } .btn.primary:hover { background: var(--plum-hover); } }
 .btn.icon-only { width: 44px; padding: 0; }
 .btn[aria-pressed="true"] { color: var(--plum); border-color: var(--plum); }
+.fav-btn .on, .fav-btn[aria-pressed="true"] .off { display: none; }
+.fav-btn[aria-pressed="true"] .on { display: inline; }
 .iconbtn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); background: var(--s2); flex: none; }
 .iconbtn svg { width: 20px; height: 20px; }
-.act-note { color: var(--plum); font-size: 14px; align-self: center; }
 
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(4, 1fr);
@@ -189,11 +190,15 @@ svg:not(.art) { width: 22px; height: 22px; fill: none; stroke: currentColor; str
 
 .timer-pill {
   position: fixed; z-index: 21; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--tabbar) + 12px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 8px;
-  padding: 9px 16px 9px 12px; border-radius: 999px; background: var(--ink); color: var(--bg); max-width: calc(100vw - 32px);
+  bottom: calc(var(--tabbar) + 12px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 2px;
+  padding: 4px 4px 4px 12px; border-radius: 999px; background: var(--ink); color: var(--bg); max-width: calc(100vw - 32px);
   box-shadow: 0 10px 30px rgb(0 0 0 / .45);
 }
 @media (min-width: 720px) { .timer-pill { bottom: 100px; } }
+.tp-open { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 5px 4px 5px 0; color: inherit; }
+.tp-stop { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: inherit; background: rgb(20 17 24 / .1); flex: none; }
+.tp-stop svg { width: 17px; height: 17px; }
+.cook-clock .tp-stop { width: 28px; height: 28px; margin-right: -6px; }
 .timer-pill .mono { font-size: 15px; font-weight: 500; }
 .timer-pill small { font-size: 12px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .timer-pill.ring, .cook-clock.ring { background: var(--amber); color: var(--bg); animation: ring .9s ease-in-out infinite; }
@@ -266,6 +271,13 @@ dialog::backdrop { background: rgb(10 7 14 / .72); }
 .ing li.no .nm, .ing li.no .amt { color: var(--amber); }
 .ing li.base .nm, .ing li.opt .nm, .ing li.opt .amt { color: var(--muted); }
 .tag { font: 9.5px var(--f-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--amber); border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
+.photo-steps {
+  display: flex; align-items: center; gap: 10px; margin: -2px 0 16px; padding: 11px 14px; border-radius: 12px;
+  background: var(--s2); border: 1px dashed var(--line); color: var(--ink); text-decoration: none; font-size: 14px;
+}
+.photo-steps svg { width: 18px; height: 18px; color: var(--plum); }
+.photo-steps span:not(.arrow) { flex: 1; }
+.photo-steps .arrow { color: var(--muted); }
 .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .steps li { display: grid; grid-template-columns: 64px minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: 14px; align-items: start; padding-bottom: 14px; border-bottom: 1px dashed var(--s3); }
 .sart { grid-row: 1 / 3; background: var(--s2); border-radius: 10px; padding: 6px; }
@@ -301,7 +313,7 @@ dialog::backdrop { background: rgb(10 7 14 / .72); }
 .cook-top { display: flex; align-items: center; gap: 12px; }
 .cook-name { flex: 1; min-width: 0; }
 .cook-name .nm { font: italic 600 19px/1.15 var(--f-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cook-clock { display: flex; align-items: center; gap: 6px; padding: 6px 12px 6px 9px; border-radius: 999px; background: var(--ink); color: var(--bg); }
+.cook-clock { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 9px; border-radius: 999px; background: var(--ink); color: var(--bg); }
 .cook-clock svg { width: 18px; height: 18px; }
 .cook-clock .mono { font-size: 14px; font-weight: 500; }
 .cook-clock.ring { animation: none; }

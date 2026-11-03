@@ -1,46 +1,100 @@
-import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const assets = join(root, 'app/src/main/assets');
-const UA = 'ChtoPrigotovitBuild/1.0 (https://github.com; GitHub Actions build)';
+const UA = 'ChtoPrigotovitBuild/2.0 (open-source recipe app; GitHub Actions build)';
 
-const exists = p => access(p).then(() => true, () => false);
+async function getJSON(url) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': UA } });
+      if (res.ok) return await res.json();
+    } catch {}
+    await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+  }
+  return null;
+}
 
-async function wikiThumb(source) {
+async function loadPhotos() {
+  const code = await readFile(join(assets, 'js/photos.js'), 'utf8');
+  const ctx = { window: {} };
+  vm.runInNewContext(code, ctx);
+  return ctx.window.PHOTOS;
+}
+
+function sourceFromPage(page) {
+  const m = page && page.match(/^https:\/\/([a-z-]+)\.wikipedia\.org\/wiki\/(.+)$/);
+  return m ? `${m[1]}:${decodeURIComponent(m[2])}` : null;
+}
+
+function plainText(html) {
+  return String(html || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ').trim();
+}
+
+async function lookup(source) {
   const [lang, title] = source.split(/:(.*)/s);
-  const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&redirects=1&prop=pageimages&pithumbsize=900&titles=${encodeURIComponent(title)}`;
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
-  if (!res.ok) return null;
-  const data = await res.json();
-  const page = Object.values(data.query?.pages || {})[0];
-  return page?.thumbnail?.source || null;
+  const api = `https://${lang}.wikipedia.org/w/api.php?format=json&formatversion=2&action=query&redirects=1`;
+  const pi = await getJSON(`${api}&prop=pageimages&piprop=thumbnail|name&pithumbsize=900&pilicense=free&titles=${encodeURIComponent(title)}`);
+  const page = pi?.query?.pages?.[0];
+  if (!page?.pageimage || !page?.thumbnail?.source) return null;
+  const ii = await getJSON(`${api}&prop=imageinfo&iiprop=url|extmetadata&iiextmetadatafilter=Artist|Credit|LicenseShortName|LicenseUrl|UsageTerms&titles=${encodeURIComponent('File:' + page.pageimage)}`);
+  const info = ii?.query?.pages?.[0]?.imageinfo?.[0];
+  if (!info) return null;
+  const meta = info.extmetadata || {};
+  let author = plainText(meta.Artist?.value) || plainText(meta.Credit?.value);
+  if (author.length > 90) author = author.slice(0, 87).trimEnd() + '…';
+  const license = plainText(meta.LicenseShortName?.value) || plainText(meta.UsageTerms?.value);
+  if (!license) return null;
+  return {
+    thumb: page.thumbnail.source,
+    credit: {
+      author: author || 'автор не указан',
+      license,
+      licenseUrl: meta.LicenseUrl?.value || '',
+      file: info.descriptionurl || '',
+    },
+  };
 }
 
 async function photos() {
-  const sources = JSON.parse(await readFile(join(root, 'tools/photo-sources.json'), 'utf8'));
-  await mkdir(join(assets, 'images'), { recursive: true });
-  for (const [id, list] of Object.entries(sources)) {
-    const target = join(assets, 'images', `${id}.jpg`);
-    if (await exists(target)) continue;
-    let saved = false;
+  const PHOTOS = await loadPhotos();
+  const extra = JSON.parse(await readFile(join(root, 'tools/photo-sources.json'), 'utf8'));
+  const credits = {};
+  const ids = Object.keys(PHOTOS);
+  let ok = 0;
+
+  async function handle(id) {
+    const list = extra[id] || [sourceFromPage(PHOTOS[id].page)].filter(Boolean);
     for (const source of list) {
+      const found = await lookup(source);
+      if (!found) continue;
       try {
-        const thumb = await wikiThumb(source);
-        if (!thumb) continue;
-        const img = await fetch(thumb, { headers: { 'User-Agent': UA } });
+        const img = await fetch(found.thumb, { headers: { 'User-Agent': UA } });
         if (!img.ok) continue;
+        const target = join(assets, PHOTOS[id].file);
+        await mkdir(dirname(target), { recursive: true });
         await writeFile(target, Buffer.from(await img.arrayBuffer()));
-        console.log(`photo ${id} <- ${source}`);
-        saved = true;
-        break;
-      } catch (e) {
-        console.log(`photo ${id}: ${source} failed (${e.message})`);
-      }
+        credits[id] = found.credit;
+        ok++;
+        return;
+      } catch {}
     }
-    if (!saved) console.log(`photo ${id}: not found, placeholder will be used`);
+    console.log(`photo ${id}: no free image with author info, keeping the stored one`);
   }
+
+  const queue = [...ids];
+  await Promise.all(Array.from({ length: 6 }, async () => { while (queue.length) await handle(queue.shift()); }));
+
+  const sorted = Object.fromEntries(Object.keys(credits).sort().map(k => [k, credits[k]]));
+  await writeFile(join(assets, 'js/credits.js'), `window.CREDITS = ${JSON.stringify(sorted, null, 2)};\n`);
+  console.log(`photos with author and license: ${ok} of ${ids.length}`);
 }
 
 async function fonts() {

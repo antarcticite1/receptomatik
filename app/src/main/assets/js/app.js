@@ -1,5 +1,5 @@
 (() => {
-  const P = window.PANTRY, R = window.RECIPES, PHOTOS = window.PHOTOS || {}, CATS = window.CATEGORIES;
+  const P = window.PANTRY, R = window.RECIPES, PHOTOS = window.PHOTOS || {}, CREDITS = window.CREDITS || {}, CATS = window.CATEGORIES;
   const { STEP, ICON, stepKind } = window.ART;
   const M = {};
   for (const row of window.MEASURES) if (row[0]) M[row[0]] = row;
@@ -306,6 +306,15 @@
   }
   const shopKeys = () => Object.keys(state.shop).filter(k => P[k]);
   const inShop = r => analyze(r).missing.every(k => state.shop[k] && state.shop[k].r.includes(r.id));
+  function photoCredit(id) {
+    const p = PHOTOS[id], c = CREDITS[id];
+    if (c) {
+      const author = c.file ? `<a href="${esc(c.file)}" target="_blank" rel="noopener">${esc(c.author)}</a>` : esc(c.author);
+      const lic = c.licenseUrl ? `<a href="${esc(c.licenseUrl)}" target="_blank" rel="noopener">${esc(c.license)}</a>` : esc(c.license);
+      return `<p class="credit">Фото: ${author} · ${lic} · Викисклад</p>`;
+    }
+    return p && p.page ? `<p class="credit">Фото: <a href="${esc(p.page)}" target="_blank" rel="noopener">из статьи Википедии</a></p>` : '';
+  }
   function drawRecipe() {
     const r = current, k = servings / r.serv, a = analyze(r), p = PHOTOS[r.id];
     const rows = r.ing.map(row => {
@@ -319,7 +328,7 @@
       return `<li class="${cls}"><span class="nm">${esc(name)}${!has && !it.opt ? '<span class="tag">купить</span>' : ''}${extra ? `<small>${esc(extra)}</small>` : ''}</span>
         <span class="lead" aria-hidden="true"></span><span class="amt">${esc(fmtQty(q, it.unit))}${hint ? `<small>${hint}</small>` : ''}</span></li>`;
     }).join('');
-    const buy = !a.missing.length ? `<span class="act-note">Всё есть дома</span>`
+    const buy = !a.missing.length ? ''
       : inShop(r) ? `<button type="button" class="btn" id="openShopBtn">${icon('basket')}В списке покупок</button>`
       : `<button type="button" class="btn" id="addShopBtn">${icon('basket')}Купить недостающее · ${a.missing.length}</button>`;
     $('recipe').innerHTML = `<div class="sheet-in recipe">
@@ -338,7 +347,7 @@
         </div>
         <div class="actions">
           <button type="button" class="btn primary" id="cookBtn">${icon('play')}Готовить по шагам</button>
-          <button type="button" class="btn icon-only" data-fav="${r.id}" aria-pressed="${state.fav.has(r.id)}" aria-label="В избранное">${icon('heart')}</button>
+          <button type="button" class="btn fav-btn" data-fav="${r.id}" aria-pressed="${state.fav.has(r.id)}">${icon('heart')}<span class="on">В избранном</span><span class="off">В избранное</span></button>
           ${buy}
         </div>
         <div class="cols">
@@ -349,10 +358,11 @@
           </section>
           <section>
             <h3>Как готовить</h3>
+            <a class="photo-steps" href="https://yandex.ru/images/search?text=${encodeURIComponent(r.name + ' рецепт пошагово с фото')}" target="_blank" rel="noopener">${icon('search')}<span>Пошаговые фото этого блюда в интернете</span><span class="arrow">↗</span></a>
             <ol class="steps">${r.steps.map((s, i) => `<li><span class="sart">${STEP[stepKind(s)]}</span><span class="snum">${i + 1}</span><label><input type="checkbox"><span>${esc(s)}</span></label></li>`).join('')}</ol>
           </section>
         </div>
-        ${p && p.page ? `<p class="credit">Фото: <a href="${esc(p.page)}" target="_blank" rel="noopener">Википедия</a></p>` : ''}
+        ${photoCredit(r.id)}
       </div>
     </div>`;
   }
@@ -456,7 +466,7 @@
   $('measures').addEventListener('click', e => { if (e.target === $('measures') || e.target.closest('[data-close]')) closeSheet($('measures')); });
 
   const cook = { r: null, i: 0 };
-  const timer = { end: 0, label: '', done: false, id: 0, audio: null };
+  const timer = { end: 0, label: '', done: false, id: 0, audio: null, recipe: null, step: 0 };
   function parseDuration(text) {
     const m = text.match(/(\d+(?:[,.]\d+)?)(?:\s*[–-]\s*\d+(?:[,.]\d+)?)?\s*(минут|мин\b|час|ч\b|секунд|сек\b)/i);
     if (!m) return 0;
@@ -514,7 +524,7 @@
     if (a === 'close') closeCook();
     if (a === 'prev') stepCook(-1);
     if (a === 'next') stepCook(1);
-    if (a === 'timer') startTimer(+b.dataset.dur, `${cook.r.name}, шаг ${cook.i + 1}`);
+    if (a === 'timer') startTimer(+b.dataset.dur, `${cook.r.name}, шаг ${cook.i + 1}`, cook.r.id, cook.i);
   });
   $('cook').addEventListener('cancel', () => { if (app && app.keepScreenOn) try { app.keepScreenOn(false); } catch {} });
   let sx = 0, sy = 0;
@@ -524,11 +534,12 @@
     if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) stepCook(dx < 0 ? 1 : -1);
   }, { passive: true });
 
-  function startTimer(sec, label) {
-    timer.end = Date.now() + sec * 1000; timer.label = label; timer.done = false;
+  function startTimer(sec, label, recipe, step) {
+    const replaced = timer.end && !timer.done;
+    timer.end = Date.now() + sec * 1000; timer.label = label; timer.done = false; timer.recipe = recipe; timer.step = step;
     try { timer.audio = timer.audio || new (window.AudioContext || window.webkitAudioContext)(); timer.audio.resume(); } catch {}
     clearInterval(timer.id); timer.id = setInterval(tick, 500);
-    toast(`Таймер на ${fmtDur(sec)} запущен`);
+    toast(replaced ? `Новый таймер на ${fmtDur(sec)}, прежний остановлен` : `Таймер на ${fmtDur(sec)} запущен`);
     tick();
   }
   function beep() {
@@ -555,15 +566,21 @@
     }
     const txt = timer.done ? 'Время вышло' : fmtClock(left);
     pill.hidden = $('cook').open; pill.classList.toggle('ring', timer.done);
-    pill.innerHTML = `${icon('timer')}<span class="mono">${txt}</span><small>${esc(timer.label)}</small>`;
-    if (clock) { clock.hidden = false; clock.classList.toggle('ring', timer.done); clock.innerHTML = `${icon('timer')}<span class="mono">${txt}</span>`; }
+    pill.innerHTML = `<button type="button" class="tp-open" data-timer="open">${icon('timer')}<span class="mono">${txt}</span><small>${esc(timer.label)}</small></button>
+      <button type="button" class="tp-stop" data-timer="stop" aria-label="Остановить таймер">${icon('close')}</button>`;
+    if (clock) {
+      clock.hidden = false; clock.classList.toggle('ring', timer.done);
+      clock.innerHTML = `${icon('timer')}<span class="mono">${txt}</span><button type="button" class="tp-stop" data-timer="stop" aria-label="Остановить таймер">${icon('close')}</button>`;
+    }
   }
-  function stopTimer() { timer.end = 0; timer.done = false; clearInterval(timer.id); tick(); }
-  $('timerPill').addEventListener('click', () => {
-    if (timer.done) { stopTimer(); return; }
-    if (cook.r) { drawCook(); $('cook').showModal(); if (app && app.keepScreenOn) try { app.keepScreenOn(true); } catch {} }
+  function stopTimer(silent) { const was = timer.end && !timer.done; timer.end = 0; timer.done = false; clearInterval(timer.id); tick(); if (was && !silent) toast('Таймер остановлен'); }
+  $('timerPill').addEventListener('click', e => {
+    const b = e.target.closest('[data-timer]'); if (!b) return;
+    if (b.dataset.timer === 'stop' || timer.done) { stopTimer(); return; }
+    const r = R.find(x => x.id === timer.recipe);
+    if (r) { cook.r = r; cook.i = timer.step; drawCook(); $('cook').showModal(); if (app && app.keepScreenOn) try { app.keepScreenOn(true); } catch {} }
   });
-  $('cook').addEventListener('click', e => { if (e.target.closest('#cookClock') && timer.done) stopTimer(); });
+  $('cook').addEventListener('click', e => { if (e.target.closest('[data-timer="stop"]')) stopTimer(); });
 
   window.__appBack = () => {
     if ($('cook').open) { closeCook(); return true; }
