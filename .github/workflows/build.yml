@@ -81,23 +81,27 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
-          cp app/build/outputs/apk/release/app-release.apk chto-prigotovit.apk
-          sha256sum chto-prigotovit.apk | tee chto-prigotovit.apk.sha256
+          VERSION="$(sed -n 's/.*versionName "\(.*\)\${runNumber}".*/\1/p' app/build.gradle)${GITHUB_RUN_NUMBER}"
+          APK="chto-prigotovit-v${VERSION}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          sha256sum "$APK" | tee "$APK.sha256"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "APK=$APK" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
         if: steps.unpack.outputs.skip != 'true'
         with:
           name: chto-prigotovit-apk
           path: |
-            chto-prigotovit.apk
-            chto-prigotovit.apk.sha256
+            chto-prigotovit-v*.apk
+            chto-prigotovit-v*.apk.sha256
 
       - name: Опубликовать в Releases
         if: steps.unpack.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "build-${{ github.run_number }}" chto-prigotovit.apk chto-prigotovit.apk.sha256 \
-            --title "Что приготовить? — сборка ${{ github.run_number }}" \
+          gh release create "v$VERSION" "$APK" "$APK.sha256" \
+            --title "chto-prigotovit" \
             --notes "Собрано из коммита ${{ github.sha }}. Журнал сборки: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --latest
