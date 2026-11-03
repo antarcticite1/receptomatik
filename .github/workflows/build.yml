@@ -1,4 +1,4 @@
-name: Собрать APK
+name: Сборка APK
 
 on:
   push:
@@ -13,37 +13,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Если проект загружен одним архивом — распаковываем его
-      - name: Распаковать проект
+      - name: Распаковать project.zip в репозиторий
+        id: unpack
         run: |
           if [ -f project.zip ]; then
-            unzip -o -q project.zip -d .
+            if unzip -l project.zip | grep -q "tools/prepare-assets.mjs"; then
+              unzip -o -q project.zip -x '.github/*' -d .
+              git rm -q project.zip
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git add -A
+              git commit -q -m "Исходный код приложения"
+              git push
+            else
+              echo "::notice::Загрузите новый project.zip — сборка начнётся после этого."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           fi
-          ls
+          if [ ! -f settings.gradle ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/setup-java@v4
+        if: steps.unpack.outputs.skip != 'true'
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        if: steps.unpack.outputs.skip != 'true'
+        with:
+          node-version: 20
 
-      - name: Собрать
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.unpack.outputs.skip != 'true'
+
+      - name: Скачать фото новых блюд и шрифты
+        if: steps.unpack.outputs.skip != 'true'
+        run: node tools/prepare-assets.mjs
+
+      - name: Подготовить ключ подписи
+        if: steps.unpack.outputs.skip != 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Нет секрета KEYSTORE_BASE64. Добавьте его в Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Собрать APK
+        if: steps.unpack.outputs.skip != 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
           cp app/build/outputs/apk/release/app-release.apk chto-prigotovit.apk
+          sha256sum chto-prigotovit.apk | tee chto-prigotovit.apk.sha256
 
       - uses: actions/upload-artifact@v4
+        if: steps.unpack.outputs.skip != 'true'
         with:
           name: chto-prigotovit-apk
-          path: chto-prigotovit.apk
+          path: |
+            chto-prigotovit.apk
+            chto-prigotovit.apk.sha256
 
-      - name: Выложить в «Releases» для скачивания с телефона
+      - name: Опубликовать в Releases
+        if: steps.unpack.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "build-${{ github.run_number }}" chto-prigotovit.apk \
+          gh release create "build-${{ github.run_number }}" chto-prigotovit.apk chto-prigotovit.apk.sha256 \
             --title "Что приготовить? — сборка ${{ github.run_number }}" \
-            --notes "Скачайте chto-prigotovit.apk и откройте его на телефоне." \
+            --notes "Собрано из коммита ${{ github.sha }}. Журнал сборки: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --latest
