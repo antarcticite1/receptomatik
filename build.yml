@@ -1,0 +1,49 @@
+name: Собрать APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Если проект загружен одним архивом — распаковываем его
+      - name: Распаковать проект
+        run: |
+          if [ -f project.zip ]; then
+            unzip -o -q project.zip -d .
+          fi
+          ls
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Собрать
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk chto-prigotovit.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chto-prigotovit-apk
+          path: chto-prigotovit.apk
+
+      - name: Выложить в «Releases» для скачивания с телефона
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" chto-prigotovit.apk \
+            --title "Что приготовить? — сборка ${{ github.run_number }}" \
+            --notes "Скачайте chto-prigotovit.apk и откройте его на телефоне." \
+            --latest
