@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141118">
+<title>Что приготовить?</title>
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,500;1,600&family=Manrope:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <div class="kicker" id="kicker"></div>
+      <h1 id="title"></h1>
+    </div>
+    <button type="button" class="measure-btn" id="measuresBtn" aria-label="Сколько граммов в ложке">
+      <span class="ico" data-icon="spoon"></span><span>граммы<br>в ложке</span>
+    </button>
+  </header>
+
+  <main>
+    <section class="view" id="view-menu">
+      <p class="ready-line" id="readyLine"></p>
+      <div class="searchbar">
+        <label class="search"><span class="ico" data-icon="search"></span><input id="dishSearch" type="search" placeholder="Блюдо или продукт" autocomplete="off"></label>
+        <button type="button" class="filter-btn" id="filtersBtn"><span class="ico" data-icon="filter"></span>Фильтры<b id="filterCount" hidden></b></button>
+      </div>
+      <div class="meals" id="meals" role="group" aria-label="Приём пищи"></div>
+      <div id="results"></div>
+      <p class="credit">Фотографии блюд — из Википедии и Викисклада, ссылка на источник есть в каждом рецепте.</p>
+    </section>
+
+    <section class="view" id="view-fridge" hidden>
+      <p class="ready-line">Отметьте, что есть дома, и меню пересчитается само.</p>
+      <div class="searchbar">
+        <label class="search"><span class="ico" data-icon="search"></span><input id="ingSearch" type="search" placeholder="Найти продукт" autocomplete="off"></label>
+      </div>
+      <div class="fridge-tools">
+        <label class="check"><input type="checkbox" id="baseToggle"><span>Соль, сахар, масло, вода, перец и лавровый лист всегда есть</span></label>
+        <button type="button" class="textbtn" id="clearAll">Снять все</button>
+      </div>
+      <div id="groups"></div>
+    </section>
+
+    <section class="view" id="view-fav" hidden>
+      <div id="favList"></div>
+    </section>
+
+    <section class="view" id="view-shop" hidden>
+      <div id="shopList"></div>
+    </section>
+  </main>
+</div>
+
+<button type="button" class="timer-pill" id="timerPill" hidden></button>
+<nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
+
+<dialog class="sheet" id="recipe" aria-labelledby="recipeTitle"></dialog>
+<dialog class="sheet small" id="filters" aria-label="Фильтры"></dialog>
+<dialog class="sheet small" id="measures" aria-label="Сколько граммов в ложке"></dialog>
+<dialog class="cook" id="cook" aria-label="Готовим по шагам"></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/recipes.js"></script>
+<script src="js/photos.js"></script>
+<script src="js/measures.js"></script>
+<script src="js/art.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
