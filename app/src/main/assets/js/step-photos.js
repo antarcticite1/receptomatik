@@ -1,0 +1,1 @@
+window.STEP_PHOTOS = {};

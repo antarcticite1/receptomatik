@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -124,5 +124,20 @@ async function fonts() {
   }
 }
 
+async function stepPhotos() {
+  const dir = join(assets, 'steps');
+  const map = {};
+  let files = [];
+  try { files = await readdir(dir); } catch {}
+  for (const f of files.sort()) {
+    const m = f.match(/^([a-z0-9]+)-(\d+)\.(jpe?g|png|webp)$/i);
+    if (!m) continue;
+    (map[m[1]] = map[m[1]] || {})[+m[2]] = `steps/${f}`;
+  }
+  await writeFile(join(assets, 'js/step-photos.js'), `window.STEP_PHOTOS = ${JSON.stringify(map, null, 2)};\n`);
+  console.log(`step photos: ${Object.values(map).reduce((n, x) => n + Object.keys(x).length, 0)}`);
+}
+
+await stepPhotos();
 await photos();
 await fonts();

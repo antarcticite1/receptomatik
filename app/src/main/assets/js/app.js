@@ -1,5 +1,5 @@
 (() => {
-  const P = window.PANTRY, R = window.RECIPES, PHOTOS = window.PHOTOS || {}, CREDITS = window.CREDITS || {}, CATS = window.CATEGORIES;
+  const P = window.PANTRY, R = window.RECIPES, PHOTOS = window.PHOTOS || {}, CREDITS = window.CREDITS || {}, SP = window.STEP_PHOTOS || {}, CATS = window.CATEGORIES;
   const { STEP, ICON, stepKind } = window.ART;
   const M = {};
   for (const row of window.MEASURES) if (row[0]) M[row[0]] = row;
@@ -26,7 +26,9 @@
       try {
         localStorage.setItem(KEY, JSON.stringify({
           have: [...state.have], base: state.base, cat: state.cat, cuisines: [...state.cuisines], time: state.time,
-          diff: state.diff, veg: state.veg, fav: [...state.fav], shop: state.shop, tab: state.tab,
+          diff: state.diff, diet: [...state.diet], fav: [...state.fav], shop: state.shop, tab: state.tab,
+          plan: state.plan, speak: state.speak,
+          timer: timer.end ? { end: timer.end, label: timer.label, recipe: timer.recipe, step: timer.step } : null,
         }));
       } catch {}
     },
@@ -39,12 +41,23 @@
     cuisines: new Set(saved && saved.cuisines || []),
     time: saved && saved.time || 0,
     diff: saved && saved.diff || 0,
-    veg: !!(saved && saved.veg),
+    diet: new Set(saved && saved.diet || (saved && saved.veg ? ['meat', 'fish'] : [])),
     fav: new Set(saved && saved.fav || []),
     shop: saved && saved.shop || {},
+    plan: saved && saved.plan || [],
+    speak: !!(saved && saved.speak),
     tab: saved && saved.tab || 'menu',
     ingQuery: '', dishQuery: '', showRest: false,
   };
+
+  const RB = Object.fromEntries(R.map(r => [r.id, r]));
+  for (const k of Object.keys(state.shop)) {
+    const it = state.shop[k];
+    it.r = (it.r || []).map(x => typeof x === 'string' ? { id: x, serv: RB[x] ? RB[x].serv : 1 } : x).filter(x => RB[x.id]);
+  }
+  const dayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const today = () => dayKey(new Date());
+  state.plan = state.plan.filter(p => p.d >= today() && RB[p.id]);
 
   let toastTimer;
   function toast(msg) {
@@ -63,19 +76,26 @@
     const missing = keys.filter(k => !state.have.has(k));
     return { total: keys.length, have: keys.length - missing.length, missing };
   }
-  const MEATY = new Set(Object.keys(P).filter(k => P[k][1] === 'Мясо и рыба').concat('fishsauce'));
-  const hasMeat = r => r.ing.some(row => { const it = parse(row); return !it.opt && MEATY.has(it.key); });
+  const FISH = ['herring', 'fish', 'shrimp', 'fishsauce'];
+  const DIETS = [
+    ['meat', 'Без мяса', new Set(Object.keys(P).filter(k => P[k][1] === 'Мясо и рыба' && !FISH.includes(k)))],
+    ['fish', 'Без рыбы и морепродуктов', new Set(FISH)],
+    ['lactose', 'Без лактозы', new Set(Object.keys(P).filter(k => P[k][1] === 'Молочное и яйца' && k !== 'egg'))],
+  ];
+  const DIET = Object.fromEntries(DIETS.map(d => [d[0], d[2]]));
+  const fitsDiet = r => ![...state.diet].some(d => DIET[d] && r.ing.some(row => { const it = parse(row); return !it.opt && DIET[d].has(it.key); }));
 
   const TABS = [
     ['menu', 'Меню', 'menu', 'Что <em>приготовить</em>?'],
     ['fridge', 'Холодильник', 'fridge', 'Мой <em>холодильник</em>'],
+    ['plan', 'Неделя', 'calendar', 'Меню на <em>неделю</em>'],
     ['fav', 'Избранное', 'heart', '<em>Избранное</em>'],
     ['shop', 'Покупки', 'basket', 'Список <em>покупок</em>'],
   ];
   function renderTabbar() {
     const shopN = shopKeys().filter(k => !state.shop[k].done).length;
     $('tabbar').innerHTML = TABS.map(([id, label, ic]) => {
-      const badge = id === 'shop' && shopN ? `<b class="badge">${shopN}</b>` : id === 'fav' && state.fav.size ? `<b class="badge soft">${state.fav.size}</b>` : '';
+      const badge = id === 'shop' && shopN ? `<b class="badge">${shopN}</b>` : id === 'fav' && state.fav.size ? `<b class="badge soft">${state.fav.size}</b>` : id === 'plan' && state.plan.length ? `<b class="badge soft">${state.plan.length}</b>` : '';
       return `<button type="button" data-tab="${id}" aria-current="${state.tab === id ? 'page' : 'false'}"><span class="ico">${icon(ic)}${badge}</span><span>${label}</span></button>`;
     }).join('');
   }
@@ -85,6 +105,7 @@
     let k = '';
     if (state.tab === 'menu') k = `Домашняя кухня · ${R.length} ${plural(R.length, 'рецепт', 'рецепта', 'рецептов')} · ${CUISINES.length} ${plural(CUISINES.length, 'кухня', 'кухни', 'кухонь')}`;
     if (state.tab === 'fridge') { const n = haveCount(); k = `Отмечено ${n} ${plural(n, 'продукт', 'продукта', 'продуктов')}`; }
+    if (state.tab === 'plan') { const n = state.plan.length; k = n ? `${n} ${plural(n, 'блюдо', 'блюда', 'блюд')} на 7 дней` : 'Ближайшие 7 дней'; }
     if (state.tab === 'fav') k = `${state.fav.size} ${plural(state.fav.size, 'блюдо', 'блюда', 'блюд')}`;
     if (state.tab === 'shop') { const n = shopKeys().length; k = `${n} ${plural(n, 'позиция', 'позиции', 'позиций')}`; }
     $('kicker').textContent = k;
@@ -97,6 +118,7 @@
     if (tab === 'fridge') renderPantry();
     if (tab === 'fav') renderFav();
     if (tab === 'shop') renderShop();
+    if (tab === 'plan') renderPlan();
     window.scrollTo(0, 0);
   }
   $('tabbar').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) setTab(b.dataset.tab); });
@@ -137,11 +159,22 @@
 
   function renderMeals() {
     $('meals').innerHTML = ['Все', ...CATS].map(c => `<button type="button" data-cat="${c}" aria-pressed="${state.cat === c}">${c === 'Все' ? 'Всё' : c}</button>`).join('');
-    const n = state.cuisines.size + (state.time ? 1 : 0) + (state.diff ? 1 : 0) + (state.veg ? 1 : 0);
+    const n = state.cuisines.size + (state.time ? 1 : 0) + (state.diff ? 1 : 0) + state.diet.size;
     $('filterCount').hidden = !n; $('filterCount').textContent = n;
   }
   $('meals').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; state.cat = b.dataset.cat; store.save(); renderMeals(); renderResults(); });
   $('dishSearch').addEventListener('input', e => { state.dishQuery = e.target.value; renderResults(); });
+  let lastSurprise = null;
+  $('surpriseBtn').addEventListener('click', () => {
+    const list = filtered();
+    const pools = [list.filter(x => !x.a.missing.length), list.filter(x => x.a.missing.length <= 2), list];
+    const pool = pools.find(p => p.filter(x => x.r.id !== lastSurprise).length) || [];
+    const opts = pool.filter(x => x.r.id !== lastSurprise);
+    if (!opts.length) { toast('Под эти фильтры нечего предложить'); return; }
+    const pick = opts[Math.floor(Math.random() * opts.length)].r;
+    lastSurprise = pick.id;
+    openRecipe(pick.id);
+  });
 
   function photoHTML(r, cls = '') {
     const p = PHOTOS[r.id];
@@ -178,7 +211,7 @@
       (!state.cuisines.size || state.cuisines.has(r.cuisine)) &&
       (!state.time || r.time <= state.time) &&
       (!state.diff || r.diff === state.diff) &&
-      (!state.veg || !hasMeat(r)) &&
+      fitsDiet(r) &&
       (!q || r.name.toLowerCase().includes(q) || r.ing.some(row => P[parse(row).key][0].toLowerCase().includes(q)))
     ).map(r => ({ r, a: analyze(r) }))
       .sort((x, y) => x.a.missing.length - y.a.missing.length || (y.a.have / (y.a.total || 1)) - (x.a.have / (x.a.total || 1)) || x.r.time - y.r.time);
@@ -230,13 +263,15 @@
     $('filters').innerHTML = `<div class="sheet-in">
       <div class="grab"></div>
       <div class="sheet-head"><h2>Фильтры</h2><button type="button" class="iconbtn" data-close aria-label="Закрыть">${icon('close')}</button></div>
-      <div class="fgroup"><div class="kicker">Кухня</div><div class="chips">
-        ${CUISINES.map(c => `<button type="button" class="chip" data-cui="${esc(c)}" aria-pressed="${state.cuisines.has(c)}">${esc(c)}</button>`).join('')}</div></div>
+      <div class="fgroup"><div class="kicker">Питание</div><div class="chips">
+        ${DIETS.map(([id, label]) => `<button type="button" class="chip" data-diet="${id}" aria-pressed="${state.diet.has(id)}">${label}</button>`).join('')}</div>
+        ${state.diet.has('lactose') ? '<p class="hint">Без молока, сливок, масла, сыра, творога и других молочных продуктов. Продукты «по желанию» не учитываются.</p>' : ''}</div>
       <div class="fgroup"><div class="kicker">Время</div><div class="chips">
         ${[[0, 'любое'], [30, 'до 30 минут'], [60, 'до часа']].map(([v, l]) => `<button type="button" class="chip" data-time="${v}" aria-pressed="${state.time === v}">${l}</button>`).join('')}</div></div>
       <div class="fgroup"><div class="kicker">Сложность</div><div class="chips">
         ${[[0, 'любая'], [1, 'легко'], [2, 'средне'], [3, 'сложно']].map(([v, l]) => `<button type="button" class="chip" data-diff="${v}" aria-pressed="${state.diff === v}">${l}</button>`).join('')}</div></div>
-      <label class="check big"><input type="checkbox" id="vegToggle"${state.veg ? ' checked' : ''}><span>Без мяса и рыбы</span></label>
+      <div class="fgroup"><div class="kicker">Кухня</div><div class="chips">
+        ${CUISINES.map(c => `<button type="button" class="chip" data-cui="${esc(c)}" aria-pressed="${state.cuisines.has(c)}">${esc(c)}</button>`).join('')}</div></div>
       <div class="sheet-actions"><button type="button" class="btn" id="resetFilters">Сбросить</button><button type="button" class="btn primary" data-close>Показать ${count}</button></div>
     </div>`;
   }
@@ -245,17 +280,14 @@
   $('filters').addEventListener('click', e => {
     const d = $('filters');
     if (e.target === d || e.target.closest('[data-close]')) { closeSheet(d); return; }
-    const c = e.target.closest('[data-cui]'), t = e.target.closest('[data-time]'), df = e.target.closest('[data-diff]');
-    if (c) { const v = c.dataset.cui; state.cuisines.has(v) ? state.cuisines.delete(v) : state.cuisines.add(v); }
+    const c = e.target.closest('[data-cui]'), t = e.target.closest('[data-time]'), df = e.target.closest('[data-diff]'), dt = e.target.closest('[data-diet]');
+    if (dt) { const v = dt.dataset.diet; state.diet.has(v) ? state.diet.delete(v) : state.diet.add(v); }
+    else if (c) { const v = c.dataset.cui; state.cuisines.has(v) ? state.cuisines.delete(v) : state.cuisines.add(v); }
     else if (t) state.time = +t.dataset.time;
     else if (df) state.diff = +df.dataset.diff;
-    else if (e.target.id === 'resetFilters') { state.cuisines.clear(); state.time = 0; state.diff = 0; state.veg = false; }
+    else if (e.target.id === 'resetFilters') { state.cuisines.clear(); state.time = 0; state.diff = 0; state.diet.clear(); }
     else return;
     store.save(); renderFilters(); renderMeals(); renderResults();
-  });
-  $('filters').addEventListener('change', e => {
-    if (e.target.id !== 'vegToggle') return;
-    state.veg = e.target.checked; store.save(); renderFilters(); renderMeals(); renderResults();
   });
   $('filters').addEventListener('close', () => { renderMeals(); renderResults(); });
 
@@ -295,9 +327,9 @@
   }
 
   let current = null, servings = 0;
-  function openRecipe(id) {
+  function openRecipe(id, serv) {
     const r = R.find(x => x.id === id); if (!r) return;
-    current = r; servings = r.serv;
+    current = r; servings = serv || r.serv;
     drawRecipe();
     const d = $('recipe');
     openSheet(d);
@@ -305,7 +337,8 @@
     try { history.replaceState(null, '', '#' + id); } catch {}
   }
   const shopKeys = () => Object.keys(state.shop).filter(k => P[k]);
-  const inShop = r => analyze(r).missing.every(k => state.shop[k] && state.shop[k].r.includes(r.id));
+  const inShop = r => analyze(r).missing.every(k => state.shop[k] && state.shop[k].r.some(x => x.id === r.id));
+  const stepPhoto = (id, i) => SP[id] && SP[id][i + 1] || '';
   function photoCredit(id) {
     const p = PHOTOS[id], c = CREDITS[id];
     if (c) {
@@ -329,8 +362,8 @@
         <span class="lead" aria-hidden="true"></span><span class="amt">${esc(fmtQty(q, it.unit))}${hint ? `<small>${hint}</small>` : ''}</span></li>`;
     }).join('');
     const buy = !a.missing.length ? ''
-      : inShop(r) ? `<button type="button" class="btn" id="openShopBtn">${icon('basket')}В списке покупок</button>`
-      : `<button type="button" class="btn" id="addShopBtn">${icon('basket')}Купить недостающее · ${a.missing.length}</button>`;
+      : inShop(r) ? `<button type="button" class="tile on" id="openShopBtn">${icon('basket')}<span>В покупках</span></button>`
+      : `<button type="button" class="tile" id="addShopBtn">${icon('basket')}<span>Купить · ${a.missing.length}</span></button>`;
     $('recipe').innerHTML = `<div class="sheet-in recipe">
       <div class="grab"></div>
       <div class="hero">${p ? photoHTML(r) : placeholder(r.name[0])}
@@ -347,8 +380,12 @@
         </div>
         <div class="actions">
           <button type="button" class="btn primary" id="cookBtn">${icon('play')}Готовить по шагам</button>
-          <button type="button" class="btn fav-btn" data-fav="${r.id}" aria-pressed="${state.fav.has(r.id)}">${icon('heart')}<span class="on">В избранном</span><span class="off">В избранное</span></button>
-          ${buy}
+          <div class="tiles">
+            <button type="button" class="tile fav-btn" data-fav="${r.id}" aria-pressed="${state.fav.has(r.id)}">${icon('heart')}<span class="on">В избранном</span><span class="off">В избранное</span></button>
+            <button type="button" class="tile" id="planBtn">${icon('calendar')}<span>На неделю</span></button>
+            ${buy}
+            <button type="button" class="tile" id="shareRecipe">${icon('share')}<span>Поделиться</span></button>
+          </div>
         </div>
         <div class="cols">
           <section>
@@ -359,7 +396,7 @@
           <section>
             <h3>Как готовить</h3>
             <a class="photo-steps" href="https://yandex.ru/images/search?text=${encodeURIComponent(r.name + ' рецепт пошагово с фото')}" target="_blank" rel="noopener">${icon('search')}<span>Пошаговые фото этого блюда в интернете</span><span class="arrow">↗</span></a>
-            <ol class="steps">${r.steps.map((s, i) => `<li><span class="sart">${STEP[stepKind(s)]}</span><span class="snum">${i + 1}</span><label><input type="checkbox"><span>${esc(s)}</span></label></li>`).join('')}</ol>
+            <ol class="steps">${r.steps.map((s, i) => `<li${stepPhoto(r.id, i) ? ' class="has-photo"' : ''}>${stepPhoto(r.id, i) ? `<img class="sphoto" src="${esc(stepPhoto(r.id, i))}" alt="Шаг ${i + 1}" loading="lazy">` : `<span class="sart">${STEP[stepKind(s)]}</span>`}<span class="snum">${i + 1}</span><label><input type="checkbox"><span>${esc(s)}</span></label></li>`).join('')}</ol>
           </section>
         </div>
         ${photoCredit(r.id)}
@@ -370,45 +407,80 @@
     const d = $('recipe');
     if (e.target === d || e.target.closest('[data-close]')) { closeSheet(d); return; }
     const fb = e.target.closest('[data-fav]'); if (fb) { toggleFav(fb.dataset.fav); return; }
-    if (e.target.closest('#addShopBtn')) { addMissing(current); drawRecipe(); return; }
+    if (e.target.closest('#addShopBtn')) { addMissing(current, servings); drawRecipe(); return; }
     if (e.target.closest('#openShopBtn')) { closeSheet(d); setTab('shop'); return; }
     if (e.target.closest('#cookBtn')) { startCook(current); return; }
+    if (e.target.closest('#planBtn')) { openDayPick(); return; }
+    if (e.target.closest('#shareRecipe')) { shareText(recipeText(current, servings), 'Рецепт скопирован'); return; }
     if (e.target.closest('[data-open-measures]')) { openMeasures(); return; }
     if (e.target.id === 'servMinus' && servings > 1) { servings--; drawRecipe(); }
     if (e.target.id === 'servPlus' && servings < 20) { servings++; drawRecipe(); }
   });
+  function recipeText(r, serv) {
+    const k = serv / r.serv;
+    const ing = r.ing.map(parse).map(it => `— ${P[it.key][0]}${it.qty == null ? ', по вкусу' : ' — ' + fmtQty(it.qty * k, it.unit)}${it.opt ? ' (по желанию)' : ''}`);
+    return `${r.name}\n${r.desc}\n\nПродукты на ${serv} ${plural(serv, 'порцию', 'порции', 'порций')}:\n${ing.join('\n')}\n\nКак готовить:\n${r.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
+  }
   $('recipe').addEventListener('close', () => {
     try { history.replaceState(null, '', location.pathname + location.search); } catch {}
     if (state.tab === 'menu') renderResults();
     if (state.tab === 'fav') renderFav();
+    if (state.tab === 'plan') renderPlan();
   });
 
-  function addMissing(r) {
+  function putMissing(r, serv) {
     const miss = analyze(r).missing;
     for (const k of miss) {
       const it = state.shop[k] || (state.shop[k] = { r: [], done: false });
-      if (!it.r.includes(r.id)) it.r.push(r.id);
+      const ex = it.r.find(x => x.id === r.id);
+      if (ex) ex.serv = serv; else it.r.push({ id: r.id, serv });
+      it.done = false;
     }
+    return miss.length;
+  }
+  function addMissing(r, serv) {
+    const n = putMissing(r, serv || r.serv);
     store.save(); renderTabbar();
-    toast(`В список покупок: ${miss.length} ${plural(miss.length, 'продукт', 'продукта', 'продуктов')}`);
+    toast(`В список покупок: ${n} ${plural(n, 'продукт', 'продукта', 'продуктов')}`);
   }
+  function amounts(k, list) {
+    const sum = {};
+    let toTaste = false;
+    for (const { id, serv } of list) {
+      const r = RB[id];
+      for (const it of r.ing.map(parse).filter(it => it.key === k)) {
+        if (it.qty == null) { toTaste = true; continue; }
+        sum[it.unit] = (sum[it.unit] || 0) + it.qty * serv / r.serv;
+      }
+    }
+    const parts = Object.entries(sum).map(([u, q]) => fmtQty(q, u));
+    if (!parts.length && toTaste) parts.push('по вкусу');
+    return parts.join(' + ');
+  }
+  const total = k => amounts(k, state.shop[k].r);
   function usage(k) {
-    return state.shop[k].r.map(id => {
-      const r = R.find(x => x.id === id); if (!r) return '';
-      const row = r.ing.map(parse).find(it => it.key === k);
-      return row && row.qty != null ? `${r.name} — ${fmtQty(row.qty, row.unit)}` : r.name;
-    }).filter(Boolean).join('; ');
+    const list = state.shop[k].r;
+    if (list.length < 2) return list.map(x => `${RB[x.id].name}, ${x.serv} ${plural(x.serv, 'порция', 'порции', 'порций')}`).join('');
+    return list.map(x => `${RB[x.id].name} — ${amounts(k, [x])}`).join('; ');
   }
+  function shareText(text, done) {
+    if (app && app.share) { try { app.share(text); return; } catch {} }
+    if (navigator.share) { navigator.share({ text }).catch(() => {}); return; }
+    try { navigator.clipboard.writeText(text).then(() => toast(done || 'Скопировано'), () => toast('Не получилось поделиться')); }
+    catch { toast('Не получилось поделиться'); }
+  }
+  const shopText = () => 'Список покупок:\n' + shopKeys().filter(k => !state.shop[k].done).map(k => `— ${P[k][0]}${total(k) ? ' — ' + total(k) : ''}`).join('\n');
   let clearArmed = false;
   function renderShop() {
     const order = [...GROUPS, 'Базовое'];
     const keys = shopKeys().sort((a, b) => order.indexOf(P[a][1]) - order.indexOf(P[b][1]));
     const doneN = keys.filter(k => state.shop[k].done).length;
     $('shopList').innerHTML = keys.length ? `<ul class="shoplist">${keys.map(k => `<li class="${state.shop[k].done ? 'done' : ''}">
-        <label><input type="checkbox" data-sk="${k}"${state.shop[k].done ? ' checked' : ''}><span class="nm">${esc(P[k][0])}<small>${esc(usage(k))}</small></span></label>
+        <label><input type="checkbox" data-sk="${k}"${state.shop[k].done ? ' checked' : ''}><span class="nm">${esc(P[k][0])}<small>${esc(usage(k))}</small></span><span class="qty">${esc(total(k))}</span></label>
         <button type="button" class="iconbtn rm" data-rm="${k}" aria-label="Убрать ${esc(P[k][0])}">${icon('close')}</button></li>`).join('')}</ul>
       <div class="shop-actions">
         <button type="button" class="btn primary" id="toFridge"${doneN ? '' : ' disabled'}>Купленное — в холодильник${doneN ? ` · ${doneN}` : ''}</button>
+        <button type="button" class="btn" id="shareShop">${icon('share')}Поделиться</button>
         <button type="button" class="btn" id="copyShop">Скопировать</button>
         <button type="button" class="btn" id="clearShop">${clearArmed ? 'Точно очистить?' : 'Очистить'}</button>
       </div>
@@ -431,8 +503,9 @@
       toast(`Теперь в холодильнике: ${done.length} ${plural(done.length, 'продукт', 'продукта', 'продуктов')}`);
       return;
     }
+    if (e.target.closest('#shareShop')) { shareText(shopText(), 'Список скопирован'); return; }
     if (e.target.closest('#copyShop')) {
-      const text = 'Список покупок:\n' + shopKeys().filter(k => !state.shop[k].done).map(k => `— ${P[k][0]} (${usage(k)})`).join('\n');
+      const text = shopText();
       if (app && app.copy) { try { app.copy(text); toast('Список скопирован'); } catch { toast('Не получилось скопировать'); } return; }
       try { navigator.clipboard.writeText(text).then(() => toast('Список скопирован'), () => toast('Не получилось скопировать')); }
       catch { toast('Не получилось скопировать'); }
@@ -442,6 +515,119 @@
       if (!clearArmed) { clearArmed = true; renderShop(); setTimeout(() => { if (clearArmed) { clearArmed = false; if (state.tab === 'shop') renderShop(); } }, 3000); return; }
       state.shop = {}; clearArmed = false; store.save(); renderShop();
     }
+  });
+
+  const WD = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+  const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  function week() {
+    const out = [], d = new Date();
+    for (let i = 0; i < 7; i++) {
+      const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i);
+      const name = i === 0 ? 'Сегодня' : i === 1 ? 'Завтра' : WD[x.getDay()][0].toUpperCase() + WD[x.getDay()].slice(1);
+      out.push({ key: dayKey(x), name, date: `${x.getDate()} ${MON[x.getMonth()]}`, short: i === 0 ? 'сегодня' : i === 1 ? 'завтра' : WD[x.getDay()] });
+    }
+    return out;
+  }
+  let pickDay = null;
+  function renderPlan() {
+    const days = week();
+    const has = state.plan.length;
+    $('planList').innerHTML = `<p class="ready-line">Разложите блюда по дням, и список покупок на всю неделю соберётся одной кнопкой.</p>
+      <div class="days">${days.map(d => {
+        const items = state.plan.map((p, i) => ({ ...p, i })).filter(p => p.d === d.key);
+        return `<section class="day"><div class="day-head"><h3>${d.name}</h3><span class="mono">${d.date}</span></div>
+          ${items.map(p => { const r = RB[p.id]; return `<div class="plan-item">
+            <button type="button" class="pi-open" data-plan-open="${p.i}"><span class="pi-photo">${photoHTML(r)}</span><span class="pi-name">${esc(r.name)}<small>${fmtTime(r.time)}</small></span></button>
+            <div class="stepper small"><button type="button" data-plan-minus="${p.i}" aria-label="Меньше порций">−</button><strong>${p.serv}</strong><button type="button" data-plan-plus="${p.i}" aria-label="Больше порций">+</button></div>
+            <button type="button" class="iconbtn rm" data-plan-rm="${p.i}" aria-label="Убрать ${esc(r.name)}">${icon('close')}</button></div>`; }).join('')}
+          <button type="button" class="add-dish" data-plan-add="${d.key}">${icon('plus')}Добавить блюдо</button></section>`;
+      }).join('')}</div>
+      ${has ? `<div class="shop-actions"><button type="button" class="btn primary" id="planToShop">${icon('basket')}Собрать список покупок</button><button type="button" class="btn" id="sharePlan">${icon('share')}Поделиться меню</button></div>
+      <p class="hint">В список попадёт только то, чего нет в холодильнике. Количество посчитается на выбранное число порций.</p>` : ''}`;
+    renderHeader(); renderTabbar();
+  }
+  $('planList').addEventListener('click', e => {
+    const b = e.target.closest('[data-plan-open],[data-plan-minus],[data-plan-plus],[data-plan-rm],[data-plan-add]');
+    if (b) {
+      const ds = b.dataset;
+      if (ds.planAdd) { pickDay = ds.planAdd; openPicker(); return; }
+      const i = +(ds.planOpen ?? ds.planMinus ?? ds.planPlus ?? ds.planRm), p = state.plan[i];
+      if (ds.planOpen != null) { openRecipe(p.id, p.serv); return; }
+      if (ds.planMinus != null && p.serv > 1) p.serv--;
+      if (ds.planPlus != null && p.serv < 20) p.serv++;
+      if (ds.planRm != null) state.plan.splice(i, 1);
+      store.save(); renderPlan(); return;
+    }
+    if (e.target.closest('#planToShop')) {
+      const agg = {};
+      for (const p of state.plan) agg[p.id] = (agg[p.id] || 0) + p.serv;
+      let n = 0;
+      const before = new Set(shopKeys());
+      for (const [id, serv] of Object.entries(agg)) n += putMissing(RB[id], serv);
+      store.save(); renderTabbar();
+      const added = shopKeys().filter(k => !before.has(k)).length;
+      toast(n ? `Список покупок обновлён${added ? `: +${added} ${plural(added, 'продукт', 'продукта', 'продуктов')}` : ''}` : 'Всё нужное уже есть в холодильнике');
+      return;
+    }
+    if (e.target.closest('#sharePlan')) {
+      const text = 'Меню на неделю:\n' + week().map(d => {
+        const items = state.plan.filter(p => p.d === d.key);
+        return items.length ? `${d.name}, ${d.date}: ${items.map(p => RB[p.id].name).join(', ')}` : '';
+      }).filter(Boolean).join('\n');
+      shareText(text, 'Меню скопировано');
+    }
+  });
+  function addToPlan(id, d, serv) {
+    state.plan.push({ d, id, serv });
+    state.plan.sort((a, b) => a.d.localeCompare(b.d));
+    store.save(); renderTabbar();
+    const day = week().find(x => x.key === d);
+    toast(`${RB[id].name} — ${day ? day.short : d}`);
+  }
+  function openDayPick() {
+    $('daypick').innerHTML = `<div class="sheet-in">
+      <div class="grab"></div>
+      <div class="sheet-head"><h2>На какой день?</h2><button type="button" class="iconbtn" data-close aria-label="Закрыть">${icon('close')}</button></div>
+      <p class="hint">${esc(current.name)}, ${servings} ${plural(servings, 'порция', 'порции', 'порций')}</p>
+      <div class="daygrid">${week().map(d => `<button type="button" class="dayopt" data-day="${d.key}"><b>${d.name}</b><span>${d.date}</span><i>${state.plan.filter(p => p.d === d.key).length || ''}</i></button>`).join('')}</div>
+    </div>`;
+    openSheet($('daypick'));
+  }
+  $('daypick').addEventListener('click', e => {
+    const d = $('daypick');
+    if (e.target === d || e.target.closest('[data-close]')) { closeSheet(d); return; }
+    const b = e.target.closest('[data-day]'); if (!b) return;
+    addToPlan(current.id, b.dataset.day, servings);
+    closeSheet(d); drawRecipe();
+  });
+  let pickQuery = '';
+  function pickerList() {
+    const q = pickQuery.trim().toLowerCase();
+    let list = R.map(r => ({ r, a: analyze(r) })).filter(x => fitsDiet(x.r));
+    if (q) list = list.filter(x => x.r.name.toLowerCase().includes(q) || x.r.ing.some(row => P[parse(row).key][0].toLowerCase().includes(q)));
+    list.sort((x, y) => (state.fav.has(y.r.id) - state.fav.has(x.r.id)) || x.a.missing.length - y.a.missing.length || x.r.name.localeCompare(y.r.name, 'ru'));
+    return list.slice(0, 40).map(({ r, a }) => `<button type="button" class="pick" data-pick="${r.id}"><span class="pi-photo">${photoHTML(r)}</span>
+      <span class="pi-name">${esc(r.name)}<small>${state.fav.has(r.id) ? '♥ ' : ''}${a.missing.length ? `не хватает: ${a.missing.length}` : 'всё есть'} · ${fmtTime(r.time)}</small></span></button>`).join('')
+      || '<p class="empty">Ничего не нашлось.</p>';
+  }
+  function openPicker() {
+    pickQuery = '';
+    const day = week().find(x => x.key === pickDay);
+    $('picker').innerHTML = `<div class="sheet-in">
+      <div class="grab"></div>
+      <div class="sheet-head"><h2>${day ? day.name : 'Блюдо'}</h2><button type="button" class="iconbtn" data-close aria-label="Закрыть">${icon('close')}</button></div>
+      <label class="search"><span class="ico">${icon('search')}</span><input id="pickSearch" type="search" placeholder="Блюдо или продукт" autocomplete="off"></label>
+      <div class="picklist" id="pickList">${pickerList()}</div>
+    </div>`;
+    openSheet($('picker'));
+  }
+  $('picker').addEventListener('input', e => { if (e.target.id === 'pickSearch') { pickQuery = e.target.value; $('pickList').innerHTML = pickerList(); } });
+  $('picker').addEventListener('click', e => {
+    const d = $('picker');
+    if (e.target === d || e.target.closest('[data-close]')) { closeSheet(d); return; }
+    const b = e.target.closest('[data-pick]'); if (!b) return;
+    addToPlan(b.dataset.pick, pickDay, RB[b.dataset.pick].serv);
+    closeSheet(d); renderPlan();
   });
 
   function openMeasures() {
@@ -493,10 +679,11 @@
         <button type="button" class="iconbtn" data-cook="close" aria-label="Закрыть">${icon('close')}</button>
         <div class="cook-name"><div class="kicker">Шаг ${i + 1} из ${n}</div><div class="nm">${esc(r.name)}</div></div>
         <div class="cook-clock" id="cookClock"${timer.end ? '' : ' hidden'}></div>
+        ${canSpeak ? `<button type="button" class="iconbtn speak${state.speak ? ' on' : ''}" data-cook="speak" aria-pressed="${state.speak}" aria-label="${state.speak ? 'Не читать вслух' : 'Читать шаги вслух'}">${icon(state.speak ? 'speaker' : 'mute')}</button>` : ''}
       </div>
       <div class="progress">${r.steps.map((_, j) => `<i class="${j < i ? 'past' : j === i ? 'now' : ''}"></i>`).join('')}</div>
       <div class="cook-body" id="cookBody">
-        <div class="cook-art">${STEP[stepKind(s)]}</div>
+        ${stepPhoto(r.id, i) ? `<img class="cook-photo" src="${esc(stepPhoto(r.id, i))}" alt="Шаг ${i + 1}">` : `<div class="cook-art">${STEP[stepKind(s)]}</div>`}
         <div class="cook-num">${i + 1}</div>
         <p class="cook-text">${esc(s)}</p>
         ${dur ? `<button type="button" class="btn timer" data-cook="timer" data-dur="${dur}">${icon('timer')}Засечь ${fmtDur(dur)}</button>` : ''}
@@ -507,9 +694,29 @@
       </div>
     </div>`;
     tick();
+    if (state.speak) say(`Шаг ${i + 1}. ${s}`);
   }
+  const canSpeak = !!(app && app.speak) || 'speechSynthesis' in window;
+  function say(text) {
+    if (app && app.speak) { try { app.speak(text); } catch {} return; }
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ru-RU';
+      speechSynthesis.speak(u);
+    } catch {}
+  }
+  function hush() {
+    if (app && app.stopSpeaking) { try { app.stopSpeaking(); } catch {} return; }
+    try { speechSynthesis.cancel(); } catch {}
+  }
+  window.__ttsError = () => {
+    state.speak = false; store.save();
+    if ($('cook').open) drawCook();
+    toast('На телефоне нет русского голоса. Включите его в настройках: Специальные возможности → Синтез речи');
+  };
   function closeCook() {
-    $('cook').close();
+    $('cook').close(); hush();
     if (app && app.keepScreenOn) try { app.keepScreenOn(false); } catch {}
   }
   function stepCook(d) {
@@ -525,8 +732,14 @@
     if (a === 'prev') stepCook(-1);
     if (a === 'next') stepCook(1);
     if (a === 'timer') startTimer(+b.dataset.dur, `${cook.r.name}, шаг ${cook.i + 1}`, cook.r.id, cook.i);
+    if (a === 'speak') {
+      state.speak = !state.speak; store.save();
+      if (!state.speak) hush();
+      toast(state.speak ? 'Буду читать шаги вслух' : 'Чтение вслух выключено');
+      drawCook();
+    }
   });
-  $('cook').addEventListener('cancel', () => { if (app && app.keepScreenOn) try { app.keepScreenOn(false); } catch {} });
+  $('cook').addEventListener('cancel', () => { hush(); if (app && app.keepScreenOn) try { app.keepScreenOn(false); } catch {} });
   let sx = 0, sy = 0;
   $('cook').addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
   $('cook').addEventListener('touchend', e => {
@@ -539,6 +752,8 @@
     timer.end = Date.now() + sec * 1000; timer.label = label; timer.done = false; timer.recipe = recipe; timer.step = step;
     try { timer.audio = timer.audio || new (window.AudioContext || window.webkitAudioContext)(); timer.audio.resume(); } catch {}
     clearInterval(timer.id); timer.id = setInterval(tick, 500);
+    if (app && app.scheduleTimer) try { app.scheduleTimer(timer.end, label); } catch {}
+    store.save();
     toast(replaced ? `Новый таймер на ${fmtDur(sec)}, прежний остановлен` : `Таймер на ${fmtDur(sec)} запущен`);
     tick();
   }
@@ -561,8 +776,11 @@
     const left = (timer.end - Date.now()) / 1000;
     if (left <= 0 && !timer.done) {
       timer.done = true; clearInterval(timer.id);
-      try { navigator.vibrate && navigator.vibrate([400, 200, 400, 200, 400]); } catch {}
-      beep(); toast('Время вышло!');
+      if (!(app && app.scheduleTimer)) {
+        try { navigator.vibrate && navigator.vibrate([400, 200, 400, 200, 400]); } catch {}
+        beep();
+      }
+      toast('Время вышло!');
     }
     const txt = timer.done ? 'Время вышло' : fmtClock(left);
     pill.hidden = $('cook').open; pill.classList.toggle('ring', timer.done);
@@ -573,7 +791,27 @@
       clock.innerHTML = `${icon('timer')}<span class="mono">${txt}</span><button type="button" class="tp-stop" data-timer="stop" aria-label="Остановить таймер">${icon('close')}</button>`;
     }
   }
-  function stopTimer(silent) { const was = timer.end && !timer.done; timer.end = 0; timer.done = false; clearInterval(timer.id); tick(); if (was && !silent) toast('Таймер остановлен'); }
+  function stopTimer(silent) {
+    const was = timer.end && !timer.done;
+    timer.end = 0; timer.done = false; clearInterval(timer.id);
+    if (app && app.cancelTimer) try { app.cancelTimer(); } catch {}
+    store.save(); tick();
+    if (was && !silent) toast('Таймер остановлен');
+  }
+  function restoreTimer(t) {
+    if (!t || !t.end) return;
+    timer.end = t.end; timer.label = t.label || ''; timer.recipe = t.recipe; timer.step = t.step || 0; timer.done = false;
+    if (Date.now() >= timer.end) timer.done = true;
+    else { clearInterval(timer.id); timer.id = setInterval(tick, 500); }
+    tick();
+  }
+  window.__appResume = () => {
+    if (!(app && app.timerEnd)) return;
+    let end = 0;
+    try { end = +app.timerEnd(); } catch {}
+    if (!end && timer.end) { timer.end = 0; timer.done = false; clearInterval(timer.id); store.save(); tick(); }
+    else tick();
+  };
   $('timerPill').addEventListener('click', e => {
     const b = e.target.closest('[data-timer]'); if (!b) return;
     if (b.dataset.timer === 'stop' || timer.done) { stopTimer(); return; }
@@ -584,13 +822,18 @@
 
   window.__appBack = () => {
     if ($('cook').open) { closeCook(); return true; }
-    for (const id of ['measures', 'filters', 'recipe']) if ($(id).open) { closeSheet($(id)); return true; }
+    for (const id of ['measures', 'filters', 'daypick', 'picker', 'recipe']) if ($(id).open) { closeSheet($(id)); return true; }
     if (state.tab !== 'menu') { setTab('menu'); return true; }
     return false;
   };
 
   renderMeals();
   setTab(state.tab);
+  if (saved && saved.timer) {
+    let alive = true;
+    if (app && app.timerEnd) { try { alive = +app.timerEnd() > 0; } catch {} }
+    if (alive) restoreTimer(saved.timer);
+  }
   const h = location.hash.slice(1);
   if (h && R.some(r => r.id === h)) openRecipe(h);
 })();

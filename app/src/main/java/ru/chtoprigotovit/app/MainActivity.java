@@ -1,15 +1,18 @@
 package ru.chtoprigotovit.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
@@ -24,6 +27,7 @@ import android.webkit.WebViewClient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public class MainActivity extends Activity {
@@ -32,6 +36,9 @@ public class MainActivity extends Activity {
     private static final String START = "https://" + HOST + "/index.html";
 
     private WebView web;
+    private TextToSpeech tts;
+    private boolean ttsReady;
+    private String pendingSpeech;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -124,14 +131,48 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         web.onResume();
+        web.evaluateJavascript("window.__appResume && window.__appResume()", null);
     }
 
     @Override
     protected void onDestroy() {
+        if (tts != null) {
+            tts.shutdown();
+        }
         if (web != null) {
             web.destroy();
         }
         super.onDestroy();
+    }
+
+    private void js(String code) {
+        runOnUiThread(() -> web.evaluateJavascript(code, null));
+    }
+
+    private void speakNow(String text) {
+        if (tts == null) {
+            pendingSpeech = text;
+            tts = new TextToSpeech(this, status -> {
+                if (status != TextToSpeech.SUCCESS) {
+                    js("window.__ttsError && window.__ttsError()");
+                    return;
+                }
+                int r = tts.setLanguage(new Locale("ru", "RU"));
+                if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    js("window.__ttsError && window.__ttsError()");
+                    return;
+                }
+                ttsReady = true;
+                if (pendingSpeech != null) {
+                    tts.speak(pendingSpeech, TextToSpeech.QUEUE_FLUSH, null, "step");
+                    pendingSpeech = null;
+                }
+            });
+        } else if (ttsReady) {
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "step");
+        } else {
+            pendingSpeech = text;
+        }
     }
 
     private class Bridge {
@@ -141,6 +182,47 @@ public class MainActivity extends Activity {
             if (cm != null) {
                 cm.setPrimaryClip(ClipData.newPlainText("Список покупок", text));
             }
+        }
+
+        @JavascriptInterface
+        public void scheduleTimer(double endAt, String label) {
+            runOnUiThread(() -> {
+                if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
+                }
+                TimerReceiver.schedule(MainActivity.this, (long) endAt, label);
+            });
+        }
+
+        @JavascriptInterface
+        public void cancelTimer() {
+            TimerReceiver.cancel(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public double timerEnd() {
+            return TimerReceiver.end(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void speak(String text) {
+            runOnUiThread(() -> speakNow(text));
+        }
+
+        @JavascriptInterface
+        public void stopSpeaking() {
+            runOnUiThread(() -> {
+                pendingSpeech = null;
+                if (tts != null) tts.stop();
+            });
+        }
+
+        @JavascriptInterface
+        public void share(String text) {
+            runOnUiThread(() -> {
+                Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text);
+                startActivity(Intent.createChooser(send, "Поделиться"));
+            });
         }
 
         @JavascriptInterface

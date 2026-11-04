@@ -106,6 +106,12 @@
     close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 5.6 8.2 12l6.4 6.4"/></svg>',
     next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.4 5.6 6.4 6.4-6.4 6.4"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.8" y="5.2" width="16.4" height="15" rx="2"/><path d="M3.8 9.8h16.4M8.4 3.4v3.4M15.6 3.4v3.4M8 13.6h2M14 13.6h2M8 16.8h2"/></svg>',
+    dice: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.4"/><circle cx="8.8" cy="8.8" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.2" cy="15.2" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.2" cy="8.8" r="1.1" fill="currentColor" stroke="none"/><circle cx="8.8" cy="15.2" r="1.1" fill="currentColor" stroke="none"/></svg>',
+    share: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="17.6" cy="5.8" r="2.4"/><circle cx="6.4" cy="12" r="2.4"/><circle cx="17.6" cy="18.2" r="2.4"/><path d="m8.5 10.8 7-3.8M8.5 13.2l7 3.8"/></svg>',
+    speaker: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.4 9.4h3.4l4.6-3.8v12.8l-4.6-3.8H4.4zM15.6 9a4.2 4.2 0 0 1 0 6M18 6.6a7.6 7.6 0 0 1 0 10.8"/></svg>',
+    mute: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.4 9.4h3.4l4.6-3.8v12.8l-4.6-3.8H4.4zM16 9.6l4.4 4.8M20.4 9.6 16 14.4"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.6v12.8L18.4 12z" fill="currentColor" stroke="none"/></svg>',
   };
 

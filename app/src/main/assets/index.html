@@ -25,7 +25,7 @@
 
   <main>
     <section class="view" id="view-menu">
-      <p class="ready-line" id="readyLine"></p>
+      <div class="ready-row"><p class="ready-line" id="readyLine"></p><button type="button" class="surprise" id="surpriseBtn"><span class="ico" data-icon="dice"></span>Удиви меня</button></div>
       <div class="searchbar">
         <label class="search"><span class="ico" data-icon="search"></span><input id="dishSearch" type="search" placeholder="Блюдо или продукт" autocomplete="off"></label>
         <button type="button" class="filter-btn" id="filtersBtn"><span class="ico" data-icon="filter"></span>Фильтры<b id="filterCount" hidden></b></button>
@@ -47,6 +47,10 @@
       <div id="groups"></div>
     </section>
 
+    <section class="view" id="view-plan" hidden>
+      <div id="planList"></div>
+    </section>
+
     <section class="view" id="view-fav" hidden>
       <div id="favList"></div>
     </section>
@@ -62,6 +66,8 @@
 
 <dialog class="sheet" id="recipe" aria-labelledby="recipeTitle"></dialog>
 <dialog class="sheet small" id="filters" aria-label="Фильтры"></dialog>
+<dialog class="sheet small" id="daypick" aria-label="Выбрать день"></dialog>
+<dialog class="sheet small" id="picker" aria-label="Выбрать блюдо"></dialog>
 <dialog class="sheet small" id="measures" aria-label="Сколько граммов в ложке"></dialog>
 <dialog class="cook" id="cook" aria-label="Готовим по шагам"></dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -69,6 +75,7 @@
 <script src="js/recipes.js"></script>
 <script src="js/photos.js"></script>
 <script src="js/credits.js"></script>
+<script src="js/step-photos.js"></script>
 <script src="js/measures.js"></script>
 <script src="js/art.js"></script>
 <script src="js/app.js"></script>
