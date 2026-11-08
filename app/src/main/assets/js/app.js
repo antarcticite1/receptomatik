@@ -27,7 +27,7 @@
         localStorage.setItem(KEY, JSON.stringify({
           have: [...state.have], base: state.base, cat: state.cat, cuisines: [...state.cuisines], time: state.time,
           diff: state.diff, diet: [...state.diet], fav: [...state.fav], shop: state.shop, tab: state.tab,
-          plan: state.plan, speak: state.speak,
+          plan: state.plan, speak: state.speak, seen: state.seen,
           timer: timer.end ? { end: timer.end, label: timer.label, recipe: timer.recipe, step: timer.step } : null,
         }));
       } catch {}
@@ -46,6 +46,7 @@
     shop: saved && saved.shop || {},
     plan: saved && saved.plan || [],
     speak: !!(saved && saved.speak),
+    seen: saved && saved.seen || [],
     tab: saved && saved.tab || 'menu',
     ingQuery: '', dishQuery: '', showRest: false,
   };
@@ -164,15 +165,27 @@
   }
   $('meals').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; state.cat = b.dataset.cat; store.save(); renderMeals(); renderResults(); });
   $('dishSearch').addEventListener('input', e => { state.dishQuery = e.target.value; renderResults(); });
-  let lastSurprise = null;
   $('surpriseBtn').addEventListener('click', () => {
     const list = filtered();
-    const pools = [list.filter(x => !x.a.missing.length), list.filter(x => x.a.missing.length <= 2), list];
-    const pool = pools.find(p => p.filter(x => x.r.id !== lastSurprise).length) || [];
-    const opts = pool.filter(x => x.r.id !== lastSurprise);
-    if (!opts.length) { toast('Под эти фильтры нечего предложить'); return; }
+    if (!list.length) { toast('Под эти фильтры нечего предложить'); return; }
+    if (list.length === 1) { toast('Под фильтры подходит только одно блюдо'); openRecipe(list[0].r.id); return; }
+    const tiers = [list.filter(x => !x.a.missing.length), list.filter(x => x.a.missing.length > 0 && x.a.missing.length <= 2), list.filter(x => x.a.missing.length > 2)];
+    const last = state.seen[state.seen.length - 1];
+    let seen = new Set(state.seen);
+    let tier = tiers.findIndex(t => t.some(x => !seen.has(x.r.id)));
+    if (tier < 0) {
+      const ids = new Set(list.map(x => x.r.id));
+      state.seen = state.seen.filter(id => !ids.has(id) || id === last);
+      seen = new Set(state.seen);
+      tier = tiers.findIndex(t => t.some(x => !seen.has(x.r.id)));
+      toast('Показал всё подходящее, начинаю заново');
+    } else if (tier > 0 && last && tiers.slice(0, tier).some(t => t.some(x => x.r.id === last))) {
+      toast(tier === 1 ? 'Всё, что можно приготовить сейчас, уже было. Вот блюдо, где не хватает пары продуктов' : 'Вот что-то новенькое, но за продуктами придётся сходить');
+    }
+    const opts = tiers[tier].filter(x => !seen.has(x.r.id));
     const pick = opts[Math.floor(Math.random() * opts.length)].r;
-    lastSurprise = pick.id;
+    state.seen = state.seen.filter(id => id !== pick.id).concat(pick.id).slice(-400);
+    store.save();
     openRecipe(pick.id);
   });
 

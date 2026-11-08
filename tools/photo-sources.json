@@ -62,5 +62,100 @@
   ],
   "sharlotka": [
     "ru:Шарлотка"
+  ],
+  "mannaya": [
+    "ru:Манная_каша",
+    "en:Semolina_pudding"
+  ],
+  "risovayakasha": [
+    "ru:Рисовая_каша",
+    "en:Rice_pudding"
+  ],
+  "shuba": [
+    "en:Dressed_herring"
+  ],
+  "tefteli": [
+    "ru:Тефтели",
+    "en:Meatball"
+  ],
+  "hvorost": [
+    "ru:Хворост_(кондитерское_изделие)",
+    "en:Angel_wings"
+  ],
+  "greenborsch": [
+    "en:Green_borscht"
+  ],
+  "sundubu": [
+    "en:Sundubu-jjigae"
+  ],
+  "pajeon": [
+    "en:Pajeon"
+  ],
+  "jiaozi": [
+    "en:Jiaozi"
+  ],
+  "beefbroccoli": [
+    "en:Beef_and_broccoli"
+  ],
+  "japancurry": [
+    "en:Japanese_curry"
+  ],
+  "yakisoba": [
+    "en:Yakisoba"
+  ],
+  "pesto": [
+    "en:Pesto"
+  ],
+  "gnocchi": [
+    "en:Gnocchi"
+  ],
+  "tatin": [
+    "en:Tarte_Tatin"
+  ],
+  "shkmeruli": [
+    "en:Shkmeruli",
+    "ru:Шкмерули"
+  ],
+  "samsa": [
+    "en:Samsa_(food)"
+  ],
+  "guacamole": [
+    "en:Guacamole"
+  ],
+  "muffins": [
+    "en:Muffin"
+  ],
+  "avotoast": [
+    "en:Avocado_toast"
+  ],
+  "aloomatar": [
+    "en:Aloo_matar"
+  ],
+  "babaganoush": [
+    "en:Baba_ghanoush"
+  ],
+  "massaman": [
+    "en:Massaman_curry"
+  ],
+  "banhmi": [
+    "en:Bánh_mì"
+  ],
+  "buncha": [
+    "en:Bún_chả"
+  ],
+  "churros": [
+    "en:Churro"
+  ],
+  "bravas": [
+    "en:Patatas_bravas"
+  ],
+  "fasolada": [
+    "en:Fasolada"
+  ],
+  "paprikash": [
+    "en:Chicken_paprikash"
+  ],
+  "langos": [
+    "en:Lángos"
   ]
 }
